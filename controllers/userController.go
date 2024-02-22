@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,7 +19,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var collection *mongo.Collection = database.OpenOrCreateDB(database.Client, "user")
+var userCollection *mongo.Collection = database.OpenOrCreateDB(database.Client, "user")
 var validate = validator.New()
 
 func HashPassword(password string) string {
@@ -54,7 +55,7 @@ func GetUser() gin.HandlerFunc {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		var user models.User
 
-		err := collection.FindOne(ctx, bson.M{"user_id": userId}).Decode(&user)
+		err := userCollection.FindOne(ctx, bson.M{"user_id": userId}).Decode(&user)
 		defer cancel()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -80,7 +81,7 @@ func SignUp() gin.HandlerFunc {
 			return
 		}
 
-		count, err := collection.CountDocuments(ctx, bson.M{"email": user.Email})
+		count, err := userCollection.CountDocuments(ctx, bson.M{"email": user.Email})
 		defer cancel()
 		if err != nil {
 			log.Panic(err)
@@ -94,7 +95,7 @@ func SignUp() gin.HandlerFunc {
 		password := HashPassword(*user.Password)
 		user.Password = &password
 
-		count, err = collection.CountDocuments(ctx, bson.M{"phone": user.Phone})
+		count, err = userCollection.CountDocuments(ctx, bson.M{"phone": user.Phone})
 		defer cancel()
 		if err != nil {
 			log.Panic(err)
@@ -118,7 +119,7 @@ func SignUp() gin.HandlerFunc {
 		user.Token = &token
 		user.Refresh_token = &refreshToken
 
-		insertNumber, errInsert := collection.InsertOne(ctx, user)
+		insertNumber, errInsert := userCollection.InsertOne(ctx, user)
 		if errInsert != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "User iter was not created"})
 		}
@@ -139,7 +140,7 @@ func Login() gin.HandlerFunc {
 			return
 		}
 
-		err := collection.FindOne(ctx, bson.M{"email": user.Email}).Decode(&userFound)
+		err := userCollection.FindOne(ctx, bson.M{"email": user.Email}).Decode(&userFound)
 		defer cancel()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "email or password is incorrect"})
@@ -160,7 +161,7 @@ func Login() gin.HandlerFunc {
 
 		token, refreshToken, _ := helpers.GenerateTokens(*userFound.Email, *userFound.First_Name, *userFound.Last_Name, *userFound.User_type, userFound.User_id)
 		helpers.UpdateTokens(token, refreshToken, userFound.User_id)
-		err = collection.FindOne(ctx, bson.M{"user_id": userFound.User_id}).Decode(&userFound)
+		err = userCollection.FindOne(ctx, bson.M{"user_id": userFound.User_id}).Decode(&userFound)
 
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -173,6 +174,49 @@ func Login() gin.HandlerFunc {
 
 func GetUsers() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.JSON(http.StatusOK, "To be implemented")
+		if err := helpers.CheckUserType(c, "ADMIN"); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		var ctx, _ = context.WithTimeout(context.Background(), 100*time.Second)
+
+		var users []models.User
+
+		page, err := strconv.Atoi(c.Query("page"))
+		if err != nil || page < 1 {
+			page = 1
+		}
+
+		limit, err := strconv.Atoi(c.Query("limit"))
+		if err != nil || limit < 1 {
+			limit = 10
+		}
+
+		findOptions := newPaginate(limit, page).getPaginatedOpts()
+
+		filter := bson.M{}
+
+		if sort := c.Query("sort"); sort != "" {
+			if sort == "ASC" {
+				findOptions.SetSort(bson.D{{"first_name", 1}})
+			} else if sort == "DESC" {
+				findOptions.SetSort(bson.D{{"first_name", -1}})
+			}
+		}
+
+		cursor, err := userCollection.Find(ctx, filter, findOptions)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while retreiving users"})
+		}
+		defer cursor.Close(ctx)
+
+		for cursor.Next(ctx) {
+			var user models.User
+			cursor.Decode(&user)
+			users = append(users, user)
+		}
+
+		c.JSON(http.StatusOK, users[0])
 	}
 }
