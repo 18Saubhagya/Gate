@@ -217,6 +217,6 @@ func GetUsers() gin.HandlerFunc {
 			users = append(users, user)
 		}
 
-		c.JSON(http.StatusOK, users[0])
+		c.JSON(http.StatusOK, users)
 	}
 }
