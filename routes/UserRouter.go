@@ -17,4 +17,7 @@ func UserRoutes(routes *gin.Engine) {
 	routes.GET("admin/study_materials", controller.GetStudyMaterials())
 	routes.GET("admin/courses", controller.GetCourses())
 	routes.GET("admin/study_plans", controller.GetStudyPlans())
+	routes.GET("study_materials/:study_material", controller.GetStudyMaterial())
+	routes.GET("courses/:course", controller.GetCourse())
+	routes.GET("study_plans/:study_plan", controller.GetStudyPlan())
 }

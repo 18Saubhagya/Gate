@@ -5,6 +5,7 @@ import (
 	"Gate/helpers"
 	"Gate/models"
 	"context"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -61,6 +62,23 @@ func AddStudyMaterial() gin.HandlerFunc {
 			return
 		}
 
+		count, err := materialCollection.CountDocuments(ctx, bson.M{"material_title": material.Material_Title})
+		defer cancel()
+
+		if err != nil {
+			log.Panic(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking for material title"})
+		}
+
+		if count > 0 {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "this material title already exists"})
+		}
+
+		material.Created_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		material.Updated_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		material.ID = primitive.NewObjectID()
+		material.Material_Id = material.ID.Hex()
+
 		num, err := materialCollection.InsertOne(ctx, material)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Material was not created"})
@@ -91,6 +109,23 @@ func AddCourse() gin.HandlerFunc {
 			return
 		}
 
+		count, err := courseCollection.CountDocuments(ctx, bson.M{"course_name": course.Course_Name})
+		defer cancel()
+
+		if err != nil {
+			log.Panic(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking for course name"})
+		}
+
+		if count > 0 {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "this course name already exists"})
+		}
+
+		course.Created_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		course.Updated_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		course.ID = primitive.NewObjectID()
+		course.Course_Id = course.ID.Hex()
+
 		num, err := courseCollection.InsertOne(ctx, course)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Course was not created"})
@@ -120,6 +155,23 @@ func AddStudyPlan() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": validation.Error()})
 			return
 		}
+
+		count, err := planCollection.CountDocuments(ctx, bson.M{"plan_name": plan.Plan_Name})
+		defer cancel()
+
+		if err != nil {
+			log.Panic(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking for plan name"})
+		}
+
+		if count > 0 {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "this plan name already exists"})
+		}
+
+		plan.Created_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		plan.Updated_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		plan.ID = primitive.NewObjectID()
+		plan.Plan_id = plan.ID.Hex()
 
 		num, err := planCollection.InsertOne(ctx, plan)
 		if err != nil {
@@ -327,5 +379,56 @@ func GetStudyPlans() gin.HandlerFunc {
 
 		c.JSON(http.StatusOK, plans[0])
 
+	}
+}
+
+func GetStudyMaterial() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("study_material")
+
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		var material models.Study_Material
+
+		err := materialCollection.FindOne(ctx, bson.M{"material_id": id}).Decode(&material)
+		defer cancel()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, material)
+	}
+}
+
+func GetCourse() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("course")
+
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		var course models.Course
+
+		err := courseCollection.FindOne(ctx, bson.M{"course_id": id}).Decode(&course)
+		defer cancel()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, course)
+	}
+}
+
+func GetStudyPlan() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("study_plan")
+
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		var plan models.Study_Plan
+
+		err := planCollection.FindOne(ctx, bson.M{"plan_id": id}).Decode(&plan)
+		defer cancel()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, plan)
 	}
 }
